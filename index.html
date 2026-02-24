@@ -1118,6 +1118,7 @@
     <a class="quick-action book" href="#appointment" data-i18n="quickBook">Afspraak</a>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script>
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
@@ -1187,10 +1188,10 @@
         optionSpecial: "Gespecialiseerde Herstelling",
         optionTires: "Bandenservice",
         submitAppt: "Afspraak Aanvragen",
-        apptNote: "Na verzenden opent je mail-app met een ingevulde aanvraag.",
-        apptSending: "Mail-app wordt geopend...",
-        apptSuccess: "Aanvraag klaar in je mail-app. Klik op verzenden om te versturen.",
-        apptError: "Mail-app kon niet geopend worden.",
+        apptNote: "Na verzenden sturen we je aanvraag automatisch door.",
+        apptSending: "Aanvraag wordt verzonden...",
+        apptSuccess: "Aanvraag succesvol verzonden. We nemen snel contact op.",
+        apptError: "Automatisch verzenden mislukt. Je mail-app wordt als back-up geopend.",
         followTitle: "Volg Ons Werk",
         followDesc: "Bekijk dagelijkse herstellingen, updates uit de werkplaats en projecthoogtepunten.",
         followLink: "@ace.carrepair op Instagram",
@@ -1260,10 +1261,10 @@
         optionSpecial: "Specialized Repairs",
         optionTires: "Tire Service",
         submitAppt: "Request Appointment",
-        apptNote: "After submit, your email app opens with a prefilled request.",
-        apptSending: "Opening email app...",
-        apptSuccess: "Request prepared in your email app. Press send to deliver it.",
-        apptError: "Could not open your email app.",
+        apptNote: "After submit, your request is sent automatically.",
+        apptSending: "Sending your request...",
+        apptSuccess: "Request sent successfully. We will contact you soon.",
+        apptError: "Auto-send failed. Opening your email app as backup.",
         followTitle: "Follow Our Work",
         followDesc: "See daily repairs, workshop updates, and project highlights.",
         followLink: "@ace.carrepair on Instagram",
@@ -1375,12 +1376,19 @@
 
     const appointmentForm = document.getElementById("appointmentForm");
     const businessEmail = "jonas.everaert@outlook.com";
+    const emailJsServiceId = "service_0lpce1w";
+    const emailJsTemplateId = "template_lpeax4j";
+    const emailJsPublicKey = "dG26haK8YtN4T7-XM";
     const appointmentDateInput = document.getElementById("apptDate");
     const appointmentNote = document.getElementById("appointmentNote");
     const appointmentSubmitBtn = appointmentForm?.querySelector("button[type=\"submit\"]");
 
     if (appointmentDateInput) {
       appointmentDateInput.min = new Date().toISOString().split("T")[0];
+    }
+
+    if (window.emailjs) {
+      window.emailjs.init({ publicKey: emailJsPublicKey });
     }
 
     appointmentForm?.addEventListener("submit", (event) => {
@@ -1441,19 +1449,46 @@
 
       if (appointmentSubmitBtn) appointmentSubmitBtn.disabled = true;
       if (appointmentNote) appointmentNote.textContent = dict.apptSending || "";
-      try {
+
+      const templateParams = {
+        name: String(data.get("name") || ""),
+        phone: String(data.get("phone") || ""),
+        email: String(data.get("email") || ""),
+        vehicle: String(data.get("vehicle") || ""),
+        service: String(selectedService || ""),
+        preferred_date: String(selectedDate || ""),
+        details: String(data.get("details") || ""),
+        submitted_at: submittedAt,
+        subject
+      };
+
+      const openMailFallback = () => {
         const mailtoUrl = `mailto:${businessEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
         window.location.href = mailtoUrl;
-        appointmentForm.reset();
-        if (appointmentDateInput) {
-          appointmentDateInput.min = new Date().toISOString().split("T")[0];
-        }
-        if (appointmentNote) appointmentNote.textContent = dict.apptSuccess || "";
-      } catch {
+      };
+
+      if (!window.emailjs) {
         if (appointmentNote) appointmentNote.textContent = dict.apptError || "";
-      } finally {
+        openMailFallback();
         if (appointmentSubmitBtn) appointmentSubmitBtn.disabled = false;
+        return;
       }
+
+      window.emailjs.send(emailJsServiceId, emailJsTemplateId, templateParams)
+        .then(() => {
+          appointmentForm.reset();
+          if (appointmentDateInput) {
+            appointmentDateInput.min = new Date().toISOString().split("T")[0];
+          }
+          if (appointmentNote) appointmentNote.textContent = dict.apptSuccess || "";
+        })
+        .catch(() => {
+          if (appointmentNote) appointmentNote.textContent = dict.apptError || "";
+          openMailFallback();
+        })
+        .finally(() => {
+          if (appointmentSubmitBtn) appointmentSubmitBtn.disabled = false;
+        });
     });
 
     setLanguage(localStorage.getItem("ace_lang") || "nl");
